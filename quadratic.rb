@@ -42,6 +42,23 @@ def midpoint(p1, p2)
 
   return [(x1 + x2) * 0.5, (y1 + y2) * 0.5]
 end
+
+def plus(v1, v2)
+  [v1.x + v2.x, v1.y + v2.y]
+end
+
+def vector(p1, p2)
+  [p2.x - p1.x, p2.y - p1.y]
+end
+
+def dot_product(v1, v2)
+  return v1.x * v2.x + v1.y * v2.y
+end
+
+def scalar_multiply(factor, v)
+  v.map { |x| factor * x }
+end
+
 # /便利関数
 
 class SheetModel < GLib::Object
@@ -68,7 +85,7 @@ class SheetModel < GLib::Object
 
   def pen_move(ev)
     if @pen_down
-      points << [ev.x, ev.y]
+      points << [(points[-1].x + ev.x)/2, (points[-1].y + ev.y)/2]
       signal_emit('changed')
     end
   end
@@ -107,11 +124,11 @@ class SheetView < Gtk::DrawingArea
       invalidate
     end
 
-#    @model.points.replace([[200, 100], [600, 100], [600, 500], [200, 500], [200, 100]])
+    # @model.points.replace([[300, 200], [500, 200], [500, 400], [300, 400], [300, 200]])
 
     self.events |= Gdk::Event::BUTTON_PRESS_MASK |
                    Gdk::Event::BUTTON_RELEASE_MASK |
-                   # Gdk::Event::POINTER_MOTION_HINT_MASK |
+                   Gdk::Event::POINTER_MOTION_HINT_MASK |
                    Gdk::Event::POINTER_MOTION_MASK
 
   end
@@ -155,35 +172,114 @@ class SheetView < Gtk::DrawingArea
     [v.x / magnitude, v.y / magnitude]
   end
 
+  def intersections(tangents, points)
+    raise 'dimension mismatch' unless tangents.size == points.size
+
+    tangents.zip(points).each_cons(2).map { |(tan1, pt1), (tan2, pt2)|
+      result = [nil, nil]
+      case intersect_lines(result, pt1, plus(pt1, tan1), pt2, plus(pt2, tan2))
+      when 0
+        p [pt1, pt2]
+        midpoint(pt1, pt2)
+      when 1
+        result[0]
+      when 2
+        p [pt1, pt2]
+        midpoint(pt1, pt2)
+      end
+    }
+  end
+
+  def intersect_lines(result, a, b, c, d)
+    # p [result, a, b, c, d]
+    # A=B C=Dのときは計算できない
+    if distance(a, b) == 0 || distance(c, d) == 0
+      return 0
+    end
+
+    ab = vector(a, b)
+    cd = vector(c, d)
+
+    n1 = normalize(ab)
+    n2 = normalize(cd)
+
+    work1 = dot_product(n1, n2)
+    work2 = 1.0 - work1*work1;
+
+    # 直線が平行な場合は計算できない 平行だとwork2が0になる
+    if work2 < 0.0001
+      return 0
+    end
+
+    ac = vector(a, c)
+
+    d1 = (dot_product(ac, n1) - work1 * dot_product(ac, n2)) / work2;
+    d2 = (work1 * dot_product(ac, n1) - dot_product(ac, n2)) / work2;
+
+    # AB上の最近点
+    result[0] = plus(a, scalar_multiply(d1, n1))
+
+    # BC上の最近点
+    result[1] = plus(c, scalar_multiply(d2, n2))
+
+    # 交差の判定 誤差は用途に合わせてください
+    p result
+    if distance(result[0], result[1]) < 0.000001
+      # 交差した
+      return 1
+    else
+      # 交差しなかった。
+      return 2
+    end
+  end
+
   def draw_on_surface
     clear
     cr = Context.new(@surface)
     vs = differences(@model.points)
-    @model.points[0..-2].each.with_index do |point, i|
-      cr.move_to(point.x, point.y)
-      cr.rel_line_to(vs[i].x, vs[i].y)
-      cr.stroke
-    end
+    # @model.points[0..-2].each.with_index do |point, i|
+    #   cr.move_to(point.x, point.y)
+    #   cr.rel_line_to(vs[i].x, vs[i].y)
+    #   cr.stroke
+    # end
 
     ts = tangents(vs)
 
-    @model.points.each.with_index do |point, i|
-      cr.set_source_rgba(rand, rand, rand)
-      cr.line_width = 3
-      cr.move_to(point.x + ts[i].x * 40, point.y + ts[i].y * 40)
-      # cr.rel_line_to(ts[i].x * 10, ts[i].y * 10)
-      # cr.stroke
-      # cr.move_to(point.x, point.y)
-      cr.rel_line_to(-ts[i].x * 80, -ts[i].y * 80)
-      cr.stroke
+    # 接線
+    if false
+      @model.points.each.with_index do |point, i|
+        cr.set_source_rgba(rand, rand, rand)
+        cr.line_width = 3
+        cr.move_to(point.x + ts[i].x * 40, point.y + ts[i].y * 40)
+        cr.rel_line_to(-ts[i].x * 80, -ts[i].y * 80)
+        cr.stroke
+      end
     end
 
-    # @model.points.each do |point|
-    #   cr.set_source_rgba(0, 0, 0)
-    #   cr.arc(point.x, point.y, 3, 0, Math::PI*2)
-    #   cr.fill
-    # end
+    xs = intersections(ts, @model.points)
+    if false
+      xs.each do |point|
+        cr.set_source_rgba(1, 0, 0)
+        cr.arc(point.x, point.y, 2, 0, Math::PI*2)
+        cr.fill
+      end
+    end
 
+    if false
+      @model.points.each do |point|
+        cr.set_source_rgba(0, 1, 0)
+        cr.arc(point.x, point.y, 3, 0, Math::PI*2)
+        cr.fill
+      end
+    end
+
+    cr.line_width = 2
+    @model.points[0..-2].each.with_index do |point, i|
+      cr.set_source_rgba( [255.0/255.0, 109/255.0, 50/255.0] )
+      cr.move_to(point.x, point.y)
+      cr.curve_to(xs[i].x, xs[i].y, point.x + vs[i].x, point.y + vs[i].y)
+      cr.stroke
+    end
   ensure
     cr.destroy
   end

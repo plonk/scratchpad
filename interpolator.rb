@@ -35,11 +35,11 @@ class Interpolator
       else
         @ring[1][X].v = ((@ring[1][X].pos - @ring[0][X].pos) + (@ring[2][X].pos - @ring[1][X].pos)) * 0.5
         @ring[1][Y].v = ((@ring[1][Y].pos - @ring[0][Y].pos) + (@ring[2][Y].pos - @ring[1][Y].pos)) * 0.5
-        unless @ring[1][2] # is_down
-          return []
-        else
+        # unless @ring[1][2] # is_down
+        #   return []
+        # else
           return interpolate
-        end
+#        end
       end
     end
   end
@@ -52,7 +52,7 @@ class Interpolator
                                 @ring[1][X].v)
     s = @ring[0][X].pos
     velocity = @ring[0][X].v
-    xpoints = (0..9).map { |n| n*0.1 }.map do |t|
+    xpoints = (0..10).map { |n| n*0.1 }.map do |t|
       [s, velocity].tap do
         s += 0.1 * velocity 
         if t < 0.5
@@ -69,7 +69,7 @@ class Interpolator
                                 @ring[1][Y].v)
     s = @ring[0][Y].pos
     velocity = @ring[0][Y].v
-    ypoints = (0..9).map { |n| n*0.1 }.map do |t|
+    ypoints = (0..10).map { |n| n*0.1 }.map do |t|
       [s, velocity].tap do
         s += 0.1 * velocity 
         if t < 0.5
@@ -86,8 +86,6 @@ class Interpolator
   end
 
   def find_accelerations(s, velocity, target_position, target_velocity)
-    # p [s, velocity, target_position, target_velocity]
-
     a = 0.0
     b = 0.0
 
@@ -114,7 +112,6 @@ class Interpolator
       elsif (velocity - target_velocity).abs >= 0.001
         b += -(velocity - target_velocity) * 1.0
       else
-        # p [:error, s - target_position, velocity - target_velocity]
         return a, b
       end
     end
