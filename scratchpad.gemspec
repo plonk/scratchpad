@@ -4,7 +4,7 @@ $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
 require 'scratchpad/version'
 
 Gem::Specification.new do |spec|
-  spec.name          = "scratchpad"
+  spec.name          = "scratchpad-app"
   spec.version       = Scratchpad::VERSION
   spec.authors       = ["Yoteichi"]
   spec.email         = ["plonk@piano.email.ne.jp"]
