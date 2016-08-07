@@ -1,3 +1,4 @@
+module Scrachpad
 
 class Interpolator
   include Math
@@ -126,4 +127,6 @@ if __FILE__ == $0
   p obj.feed(2.0, 2.0)
   p obj.feed(5.0, 5.0)
   p obj.feed(0.0, 0.0)
+end
+
 end

@@ -1,8 +1,10 @@
+require "scratchpad/interpolator"
+require "scratchpad/version"
+
 require 'toml'
 require 'gtk2'
 
-require_relative 'interpolator'
-
+module Scratchpad
 
 # 便利関数
 def distance(p1, p2)
@@ -353,6 +355,4 @@ class Program
   end
 end
 
-if $0 == __FILE__
-  Program.new.run
 end
