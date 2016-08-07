@@ -2,4 +2,4 @@
 
 require 'scratchpad'
 
-Scrachpad::Program.new.run
+Scratchpad::Program.new.run

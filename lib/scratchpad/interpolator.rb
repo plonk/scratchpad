@@ -1,4 +1,4 @@
-module Scrachpad
+module Scratchpad
 
 class Interpolator
   include Math

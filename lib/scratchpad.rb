@@ -39,6 +39,7 @@ end
 
 class Pen
   include Math
+  extend Scratchpad
 
   attr_reader :x, :y
 
@@ -207,6 +208,8 @@ class SheetModel < GLib::Object
 end
 
 class SheetView < Gtk::DrawingArea
+  include Scratchpad
+
   def initialize()
     super()
     self.app_paintable = true
@@ -339,6 +342,10 @@ class Program
 
   def run
     win = MainWindow.new
+    win.signal_connect('delete-event') do
+      Gtk.main_quit
+    end
+
     win.maximize
     sheet = SheetView.new
     win.add sheet
