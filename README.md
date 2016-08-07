@@ -5,7 +5,7 @@
 
 ## インストール
 
-    $ gem install scratchpad
+    $ gem install scratchpad-app
 
 ## 使い方
 
