@@ -386,19 +386,18 @@ class Program
   def initialize
     Signal.trap(:INT) {
       STDERR.puts("Interrupted")
-      Gtk.main_quit
-      @quit_requested = true
+      quit
     }
   end
 
   def quit
-    @quit_requested = true
+    Gtk.main_quit
   end
 
   def run
     win = MainWindow.new
     win.signal_connect('delete-event') do
-      Gtk.main_quit
+      quit
     end
 
     win.maximize
@@ -413,9 +412,6 @@ class Program
       true
     end
 
-    # until @quit_requested
-    #  Gtk.main_iteration while Gtk.events_pending?
-    # end
     Gtk.main
   end
 end
