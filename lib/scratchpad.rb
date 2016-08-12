@@ -4,6 +4,24 @@ require "scratchpad/version"
 require 'toml'
 require 'gtk2'
 
+class Array
+  def x
+    self[0]
+  end
+
+  def x=(val)
+    self[0]=val
+  end
+
+  def y
+    self[1]
+  end
+
+  def y=(val)
+    self[1]=val
+  end
+end
+
 module Scratchpad
 
 # 便利関数
@@ -33,6 +51,26 @@ def color_bytes_to_floats(bytes)
   raise 'wrong dimension' unless bytes.size.between?(3, 4)
 
   return bytes.map { |b| b / 255.0 }
+end
+
+def plus(v1, v2)
+  [v1.x + v2.x, v1.y + v2.y]
+end
+
+def vector(p1, p2)
+  [p2.x - p1.x, p2.y - p1.y]
+end
+
+def dot_product(v1, v2)
+  return v1.x * v2.x + v1.y * v2.y
+end
+
+def scalar_times(factor, v)
+  v.map { |x| factor * x }
+end
+
+def vec_lerp(alpha, v1, v2)
+  return plus(scalar_times(alpha, v1), scalar_times(1.0-alpha, v2))
 end
 
 # /便利関数
@@ -225,39 +263,22 @@ class SheetView < Gtk::DrawingArea
       draw
       true
     end
-    last_point = nil
+
+    # モーションノティファイ。
+    @last_point = nil
     signal_connect('motion-notify-event') do |self_, ev|
-      ev.x = ev.x + 0.5
-      ev.y = ev.y + 0.5
-
-      c = Cairo::Context.new(@model.debug_surface)
-        c.set_source_rgba([0, 1, 0])
-        c.rectangle(ev.x - 1, ev.y - 1, 2, 2)
-        # c.set_source_rgba([0, 0, 1])
-        # c.rectangle(ev.x - 2, ev.y - 2, 4, 4)
-      c.fill
-      c.destroy
-
-      if last_point == nil
-        last_point = [ev.x, ev.y]
-        @model.pen_move(ev)
-      else
-        if distance(last_point, [ev.x, ev.y]) < (1.0/0.0)
-          last_point = midpoint(last_point, [ev.x, ev.y])
-          ev.x, ev.y = last_point
-        else
-          last_point = [ev.x, ev.y]
-        end
-        @model.pen_move(ev)
-      end
+      handle_motion_notify_event(ev)
     end
+
+    # ボタンプレス。このイベントは同じ座標へのモーションノティファイの
+    # 後に来る。
     signal_connect('button-press-event') do |self_, ev|
+      # デバッグ描画。ボタン押下座標に赤の四角を描く。
       c = Cairo::Context.new(@model.debug_surface)
       c.set_source_rgba([1, 0, 0])
       c.rectangle(ev.x - 2, ev.y - 2, 4, 4)
       c.fill
       c.destroy
-
 
       if ev.button == 1
         @model.pen_down(ev)
@@ -267,7 +288,11 @@ class SheetView < Gtk::DrawingArea
         menu_popup(ev)
       end
     end
+
+    # ボタンリリース。このイベントは同じ座標へのモーションノティファイ
+    # の後に来る。
     signal_connect('button-release-event') do |self_, ev|
+      # デバッグ描画。ボタンリリース座標に赤の四角を描く。
       c = Cairo::Context.new(@model.debug_surface)
       c.set_source_rgba([1, 0, 0])
       c.rectangle(ev.x - 2, ev.y - 2, 4, 4)
@@ -285,11 +310,52 @@ class SheetView < Gtk::DrawingArea
       @dirty = true
     end
 
+    # POINTER_MOTION_HINT_MASKを付けるとこちらの反応が遅い場合にポイン
+    # ター座標を省略する。
     self.events |= Gdk::Event::BUTTON_PRESS_MASK |
                    Gdk::Event::BUTTON_RELEASE_MASK |
                    # Gdk::Event::POINTER_MOTION_HINT_MASK |
                    Gdk::Event::POINTER_MOTION_MASK
 
+  end
+
+  def tick
+    return if @last_motion_notify_event.nil?
+
+    t = Time.now
+    if (t - @last_motion_notify_event_time) > 0.033
+      handle_motion_notify_event(@last_motion_notify_event)
+      @last_motion_notify_event_time = t
+    end
+  end
+
+  def handle_motion_notify_event(ev)
+    ev.x = ev.x + 0.5
+    ev.y = ev.y + 0.5
+
+    @last_motion_notify_event = ev
+    @last_motion_notify_event_time = Time.now
+
+    # デバッグ描画。ポインター座標に緑の四角を描く。
+    c = Cairo::Context.new(@model.debug_surface)
+    c.set_source_rgba([0, 1, 0])
+    c.rectangle(ev.x - 1, ev.y - 1, 2, 2)
+    c.fill
+    c.destroy
+
+    if @last_point == nil
+      @last_point = [ev.x, ev.y]
+      @model.pen_move(ev)
+    else
+      # 1サンプル時間あたり距離30以上移動した場合は完全にポインター
+      # 座標にならう。
+      d = distance(@last_point, [ev.x, ev.y])
+      alpha = [(1.0/30)*d, 1].min
+      p [d, alpha] if $DEBUG
+      @last_point = vec_lerp(alpha, [ev.x, ev.y], @last_point)
+      ev.x, ev.y = @last_point
+      @model.pen_move(ev)
+    end
   end
 
   def dirty?
@@ -350,8 +416,10 @@ class SheetView < Gtk::DrawingArea
     cr.set_source(@model.surface)
     cr.paint
 
-    # cr.set_source(@model.debug_surface)
-    # cr.paint
+    if $DEBUG
+      cr.set_source(@model.debug_surface)
+      cr.paint
+    end
 
     cr.destroy
   end
@@ -406,6 +474,7 @@ class Program
     win.show_all
 
     Gtk.timeout_add(33) do
+      sheet.tick
       if sheet.dirty?
         sheet.invalidate
       end
