@@ -42,14 +42,17 @@ class Pen
   extend Scratchpad
 
   attr_reader :x, :y
+  attr_accessor :color
 
-  FAVORITE_ORANGE = color_bytes_to_floats [255, 109, 50]
-  FAVORITE_BLUE = color_bytes_to_floats [0, 3, 126]
+  BLUE   = color_bytes_to_floats [0, 3, 126]
+  ORANGE = color_bytes_to_floats [255, 109, 50]
+  GREEN  = color_bytes_to_floats [0, 124, 126]
 
   def initialize
     @is_down = false
     @interpolator = Interpolator.new
     @path = []
+    @color = BLUE
   end
 
   # [[x, y, radius]*]
@@ -82,10 +85,6 @@ class Pen
   def radius
     2.0
   end
-
-  def color
-    FAVORITE_BLUE
-  end
 end
 
 class SheetModel < GLib::Object
@@ -95,12 +94,14 @@ class SheetModel < GLib::Object
   include Math
   include Cairo
 
-  attr_reader :surface, :pen, :debug_surface
+  attr_reader :surface, :pen, :debug_surface, :outline_surface
 
   def initialize
     super()
-    @surface = ImageSurface.new(Cairo::FORMAT_ARGB32, 1200, 900)
-    @debug_surface = ImageSurface.new(Cairo::FORMAT_ARGB32, 1200, 900)
+    @surface = ImageSurface.new(Cairo::FORMAT_ARGB32, 4000, 4000)
+    @debug_surface = ImageSurface.new(Cairo::FORMAT_ARGB32, 4000, 4000)
+    @outline_surface = ImageSurface.new(Cairo::FORMAT_ARGB32, 4000, 4000)
+
     cr = Context.new(@surface)
     cr.set_operator(Cairo::OPERATOR_OVER)
     cr.line_cap = cr.line_join = :round
@@ -116,17 +117,14 @@ class SheetModel < GLib::Object
   end
 
   def clear
-    cr.save do
-      cr.set_operator(Cairo::OPERATOR_SOURCE)
-      cr.set_source_rgba(0, 0, 0, 0)
-      cr.paint
-    end
-    clear_debug
+    clear_surface(@surface)
+    clear_surface(@outline_surface)
+    clear_surface(@debug_surface)
     signal_emit('changed')
   end
 
-  def clear_debug
-    c = Context.new(@debug_surface)
+  def clear_surface(surface)
+    c = Context.new(surface)
     c.save do
       c.set_operator(Cairo::OPERATOR_SOURCE)
       c.set_source_rgba(0, 0, 0, 0)
@@ -155,48 +153,55 @@ class SheetModel < GLib::Object
       case @portion 
       when :all
         path = @pen.path
+
+        stroke_outline(path)
+
         cr.set_source_rgba(@pen.color)
         cr.line_width = @pen.radius
-        path.each.with_index do |(x, y, radius), i|
-          if i == 0
-	    cr.move_to(x, y)
-	  else
-            cr.line_to(x, y)
-	  end
-        end
-        cr.stroke
+        stroke_path(cr, path)
       when :latter_half
         path = @pen.path[5..10] || []
+
+        stroke_outline(path)
+
         cr.set_source_rgba(@pen.color)
         cr.line_width = @pen.radius
-        path.each.with_index do |(x, y, radius), i|
-	  if i == 0
-	    cr.move_to(x, y)
-	  else
-            # cr.arc(x, y, (i/4.0)*@pen.radius, 0, 2*PI)
-            cr.line_to(x, y)
-	  end
-        end
-        cr.stroke
+        stroke_path(cr, path)
       end
       @portion = :all
     else
       if @portion == :first_half
         path = @pen.path[0..4] || []
+
+        stroke_outline(path)
+
         cr.set_source_rgba(@pen.color)
         cr.line_width = @pen.radius
-        path.each.with_index do |(x, y, radius), i|
-	  if i == 0
-	    cr.move_to(x, y)
-	  else
-            cr.line_to(x, y)
-	  end
-        end
-        cr.stroke
+        stroke_path(cr, path)
+
         @portion = :all
       end
     end
     signal_emit('changed')
+  end
+
+  def stroke_outline(path)
+    cr = Cairo::Context.new(@outline_surface)
+    cr.line_cap = cr.line_join = :round
+    cr.set_source_rgba([1, 1, 1, 1.0])
+    cr.line_width = @pen.radius * 3
+    stroke_path(cr, path)
+  end
+
+  def stroke_path(cr, path)
+    path.each.with_index do |(x, y, radius), i|
+      if i == 0
+	cr.move_to(x, y)
+      else
+        cr.line_to(x, y)
+      end
+    end
+    cr.stroke
   end
 
   def pen_move(ev)
@@ -255,8 +260,10 @@ class SheetView < Gtk::DrawingArea
 
       if ev.button == 1
         @model.pen_down(ev)
-      elsif ev.button == 3
+      elsif ev.button == 2
         @model.clear
+      elsif ev.button == 3
+        menu_popup(ev)
       end
     end
     signal_connect('button-release-event') do |self_, ev|
@@ -284,6 +291,45 @@ class SheetView < Gtk::DrawingArea
 
   end
 
+  def create_context_menu
+    menu = Gtk::Menu.new
+
+    item1 = Gtk::MenuItem.new('クリア')
+    item1.signal_connect('activate') do
+      @model.clear
+    end
+    menu.append(item1)
+
+    menu.append(Gtk::MenuItem.new)
+
+    item2 = Gtk::MenuItem.new('青')
+    item2.signal_connect('activate') do 
+      @model.pen.color = Pen::BLUE
+    end
+    menu.append(item2)
+
+    item3 = Gtk::MenuItem.new('オレンジ')
+    item3.signal_connect('activate') do
+      @model.pen.color = Pen::ORANGE
+    end
+    menu.append(item3)
+
+    item4 = Gtk::MenuItem.new('緑')
+    item4.signal_connect('activate') do
+      @model.pen.color = Pen::GREEN
+    end
+    menu.append(item4)
+
+    menu.show_all
+
+    return menu
+  end
+
+  def menu_popup(button_event)
+    menu = create_context_menu
+    menu.popup(nil, nil, button_event.button, button_event.time)
+  end
+
   def draw
     cr = window.create_cairo_context
 
@@ -292,8 +338,13 @@ class SheetView < Gtk::DrawingArea
     cr.paint 
 
     cr.set_operator(Cairo::OPERATOR_OVER)
+
+    cr.set_source(@model.outline_surface)
+    cr.paint
+
     cr.set_source(@model.surface)
     cr.paint
+
     # cr.set_source(@model.debug_surface)
     # cr.paint
 
@@ -327,8 +378,6 @@ class Program
   include Gtk
 
   def initialize
-    @quit_requested = false
-
     Signal.trap(:INT) {
       STDERR.puts("Interrupted")
       Gtk.main_quit
