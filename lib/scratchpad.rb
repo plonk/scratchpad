@@ -96,11 +96,11 @@ class SheetModel < GLib::Object
 
   attr_reader :surface, :pen, :debug_surface, :outline_surface
 
-  def initialize
+  def initialize(width, height)
     super()
-    @surface = ImageSurface.new(Cairo::FORMAT_ARGB32, 4000, 4000)
-    @debug_surface = ImageSurface.new(Cairo::FORMAT_ARGB32, 4000, 4000)
-    @outline_surface = ImageSurface.new(Cairo::FORMAT_ARGB32, 4000, 4000)
+    @surface         = ImageSurface.new(Cairo::FORMAT_ARGB32, width, height)
+    @debug_surface   = ImageSurface.new(Cairo::FORMAT_ARGB32, width, height)
+    @outline_surface = ImageSurface.new(Cairo::FORMAT_ARGB32, width, height)
 
     cr = Context.new(@surface)
     cr.set_operator(Cairo::OPERATOR_OVER)
@@ -169,6 +169,7 @@ class SheetModel < GLib::Object
         stroke_path(cr, path)
       end
       @portion = :all
+      signal_emit('changed')
     else
       if @portion == :first_half
         path = @pen.path[0..4] || []
@@ -180,9 +181,9 @@ class SheetModel < GLib::Object
         stroke_path(cr, path)
 
         @portion = :all
+        signal_emit('changed')
       end
     end
-    signal_emit('changed')
   end
 
   def stroke_outline(path)
@@ -207,8 +208,6 @@ class SheetModel < GLib::Object
   def pen_move(ev)
     @pen.move(ev)
     update
-
-    signal_emit('changed')
   end
 end
 
@@ -218,6 +217,8 @@ class SheetView < Gtk::DrawingArea
   def initialize()
     super()
     self.app_paintable = true
+
+    @dirty = true
 
     set_size_request(800, 600)
     signal_connect('expose-event') do
@@ -279,9 +280,9 @@ class SheetView < Gtk::DrawingArea
       end
     end
 
-    @model = SheetModel.new
+    @model = SheetModel.new(screen.width, screen.height)
     @model.signal_connect('changed') do
-      # invalidate
+      @dirty = true
     end
 
     self.events |= Gdk::Event::BUTTON_PRESS_MASK |
@@ -289,6 +290,10 @@ class SheetView < Gtk::DrawingArea
                    # Gdk::Event::POINTER_MOTION_HINT_MASK |
                    Gdk::Event::POINTER_MOTION_MASK
 
+  end
+
+  def dirty?
+    @dirty
   end
 
   def create_context_menu
@@ -354,6 +359,7 @@ class SheetView < Gtk::DrawingArea
   def invalidate
     window.invalidate(window.clip_region, true)
     window.process_updates(true)
+    @dirty = false
   end     
 end
 
@@ -401,7 +407,10 @@ class Program
     win.show_all
 
     Gtk.timeout_add(33) do
-      sheet.invalidate
+      if sheet.dirty?
+        sheet.invalidate
+      end
+      true
     end
 
     # until @quit_requested
