@@ -283,9 +283,15 @@ class SheetView < Gtk::DrawingArea
       if ev.button == 1
         @model.pen_down(ev)
       elsif ev.button == 2
-        @model.clear
+        # 押し間違いを防ぐ。
+        unless @model.pen.down?
+          @model.clear
+        end
       elsif ev.button == 3
-        menu_popup(ev)
+        # 押し間違いを防ぐ。
+        unless @model.pen.down?
+          menu_popup(ev)
+        end
       end
     end
 
