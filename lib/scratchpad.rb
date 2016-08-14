@@ -305,7 +305,7 @@ class SheetView < Gtk::DrawingArea
       c.fill
       c.destroy
 
-      if ev.button == 1
+      if ev.button == 1 && @model.pen.down?
         @model.pen_move(ev)
         @model.pen_up(ev)
       end
@@ -336,11 +336,11 @@ class SheetView < Gtk::DrawingArea
   end
 
   def handle_motion_notify_event(ev)
+    @last_motion_notify_event = ev.dup
+    @last_motion_notify_event_time = Time.now
+
     ev.x = ev.x + 0.5
     ev.y = ev.y + 0.5
-
-    @last_motion_notify_event = ev
-    @last_motion_notify_event_time = Time.now
 
     # デバッグ描画。ポインター座標に緑の四角を描く。
     c = Cairo::Context.new(@model.debug_surface)
