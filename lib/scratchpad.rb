@@ -356,7 +356,7 @@ class SheetView < Gtk::DrawingArea
       # 1サンプル時間あたり距離30以上移動した場合は完全にポインター
       # 座標にならう。
       d = distance(@last_point, [ev.x, ev.y])
-      alpha = [(1.0/30)*d, 1].min
+      alpha = if d <= 5.0 then 0.30 else 0.60 end
       p [d, alpha] if $DEBUG
       @last_point = vec_lerp(alpha, [ev.x, ev.y], @last_point)
       ev.x, ev.y = @last_point
